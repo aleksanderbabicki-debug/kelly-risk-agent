@@ -1,5 +1,7 @@
-streamlit
-langchain==0.2.1
-langchain-core==0.2.1
-langchain-google-genai==1.0.4
-numpy
+streamlit==1.35.0
+langchain==0.2.5
+langchain-core==0.2.7
+langchain-google-genai==1.0.5
+grpcio==1.62.0
+nest-asyncio==1.6.0
+numpy==1.26.4
