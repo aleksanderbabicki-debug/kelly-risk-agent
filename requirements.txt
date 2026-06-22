@@ -1,7 +1,7 @@
 streamlit
-langchain
-langchain-core
-langchain-google-genai
+langchain>=0.2.0
+langchain-core>=0.2.17
+langchain-google-genai>=1.0.5
 google-generativeai
 grpcio==1.62.0
 grpcio-status==1.62.0
