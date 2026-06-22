@@ -1,7 +1,13 @@
-# Wersja 2 - naprawa zaleznosci
+# Wersja 3 - naprawa zaleznosci
 import os
 import numpy as np
 import streamlit as st
+import asyncio
+import nest_asyncio
+
+# CRITICAL FIX: Naprawia błąd "There is no current event loop" w Streamlit Cloud
+nest_asyncio.apply()
+
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import create_tool_calling_agent, AgentExecutor
 from langchain_core.prompts import ChatPromptTemplate
