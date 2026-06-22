@@ -77,26 +77,35 @@ def monte_carlo_math(win_rate: float, avg_win: float, avg_loss: float, kelly_fra
 # ==========================================
 # 2. NARZĘDZIA DLA AGENTA (Z bardzo dokładnymi opisami dla AI!)
 # ==========================================
-@tool
-def kelly_calculator(win_rate: float, avg_win: float, avg_loss: float) -> dict:
-    """
-    Użyj tego narzędzia jako PIERWSZEGO, aby obliczyć optymalny rozmiar pozycji (Kelly Criterion). 
-    Argumenty to:
-    - win_rate: Prawdopodobieństwo wygranej jako ułamek od 0 do 1 (np. 0.55 dla 55%).
-    - avg_win: Średni zysk wyrażony jako wielokrotność ryzyka (np. 2.0 jeśli ryzykujesz 1 by zyskać 2).
-    - avg_loss: Średnia strata wyrażona jako wielokrotność ryzyka (zawsze 1.0 w standardowym tradingu).
-    """
-    return calculate_kelly_math(win_rate, avg_win, avg_loss)
+from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field
 
-@tool
-def monte_carlo_simulation(win_rate: float, avg_win: float, avg_loss: float, kelly_fraction_used: float = 0.5) -> dict:
-    """
-    Użyj tego narzędzia jako DRUGIEGO, zaraz po kelly_calculator. 
-    Służy do przeprowadzenia symulacji Monte Carlo i zbadania ryzyka wariantowego (drawdown, bankructwo).
-    Zawsze używaj kelly_fraction_used=0.5 (Half Kelly), bo pełne Kelly jest zbyt ryzykowne.
-    Argumenty win_rate, avg_win, avg_loss muszą być IDENTYCZNE jak te podane do kelly_calculator.
-    """
-    return monte_carlo_math(win_rate, avg_win, avg_loss, kelly_fraction_used)
+# 1. Definiujemy schematy wejściowe (Pydantic) - to eliminuje błąd "Key 'default'"
+class KellyInput(BaseModel):
+    win_rate: float = Field(description="Prawdopodobieństwo wygranej jako ułamek od 0 do 1 (np. 0.55 dla 55%)")
+    avg_win: float = Field(description="Średni zysk wyrażony jako wielokrotność ryzyka (np. 2.0)")
+    avg_loss: float = Field(description="Średnia strata wyrażona jako wielokrotność ryzyka (zwykle 1.0)")
+
+class MonteCarloInput(BaseModel):
+    win_rate: float = Field(description="Prawdopodobieństwo wygranej (identyczne jak w kelly_calculator)")
+    avg_win: float = Field(description="Średni zysk (identyczny jak w kelly_calculator)")
+    avg_loss: float = Field(description="Średnia strata (identyczna jak w kelly_calculator)")
+    kelly_fraction_used: float = Field(default=0.5, description="Ułamek Kelly'ego. Zawsze używaj 0.5 (Half Kelly)")
+
+# 2. Tworzymy narzędzia za pomocą StructuredTool
+kelly_calculator = StructuredTool.from_function(
+    func=calculate_kelly_math,
+    name="kelly_calculator",
+    description="Użyj tego narzędzia jako PIERWSZEGO, aby obliczyć optymalny rozmiar pozycji (Kelly Criterion).",
+    args_schema=KellyInput
+)
+
+monte_carlo_simulation = StructuredTool.from_function(
+    func=monte_carlo_math,
+    name="monte_carlo_simulation",
+    description="Użyj tego narzędzia jako DRUGIEGO, by przeprowadzić symulację Monte Carlo i zbadać ryzyko wariantowe. Zawsze używaj kelly_fraction_used=0.5.",
+    args_schema=MonteCarloInput
+)
 
 tools = [kelly_calculator, monte_carlo_simulation]
 
