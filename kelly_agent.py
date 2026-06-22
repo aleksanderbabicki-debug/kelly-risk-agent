@@ -1,3 +1,4 @@
+# Wersja 2 - naprawa zaleznosci
 import os
 import numpy as np
 import streamlit as st
