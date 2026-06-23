@@ -1,8 +1,8 @@
 streamlit
-langchain==0.2.7
-langchain-core==0.2.17
-langchain-google-genai==1.0.8
-google-generativeai==0.7.2
+langchain>=0.2.0
+langchain-core>=0.2.0
+langchain-google-genai>=1.0.10
+google-generativeai>=0.8.0
 grpcio==1.62.0
 grpcio-status==1.62.0
 nest-asyncio
