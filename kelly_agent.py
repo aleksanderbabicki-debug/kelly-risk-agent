@@ -77,30 +77,36 @@ def monte_carlo_math(win_rate: float, avg_win: float, avg_loss: float, kelly_fra
 # ==========================================
 # 2. NARZĘDZIA DLA AGENTA (Z bardzo dokładnymi opisami dla AI!)
 # ==========================================
-from langchain_core.tools import tool
+from langchain_core.tools import StructuredTool, tool
+from pydantic import BaseModel, Field
 
-@tool
-def kelly_calculator(win_rate: float, avg_win: float, avg_loss: float) -> dict:
-    """Użyj tego narzędzia jako PIERWSZEGO, aby obliczyć optymalny rozmiar pozycji (Kelly Criterion). 
-    Argumenty to:
-    - win_rate: Prawdopodobieństwo wygranej jako ułamek od 0 do 1 (np. 0.55 dla 55%).
-    - avg_win: Średni zysk wyrażony jako wielokrotność ryzyka (np. 2.0).
-    - avg_loss: Średnia strata wyrażona jako wielokrotność ryzyka (zawsze 1.0 w standardowym tradingu).
-    """
-    return calculate_kelly_math(win_rate, avg_win, avg_loss)
+# Definiujemy schematy wejściowe
+class KellyInput(BaseModel):
+    win_rate: float = Field(description="Prawdopodobieństwo wygranej jako ułamek od 0 do 1 (np. 0.55)")
+    avg_win: float = Field(description="Średni zysk jako wielokrotność ryzyka (np. 2.0)")
+    avg_loss: float = Field(description="Średnia strata jako wielokrotność ryzyka (zwykle 1.0)")
 
-@tool
-def monte_carlo_simulation(win_rate: float, avg_win: float, avg_loss: float) -> dict:
-    """Użyj tego narzędzia jako DRUGIEGO, zaraz po kelly_calculator. 
-    Służy do przeprowadzenia symulacji Monte Carlo i zbadania ryzyka wariantowego (drawdown, bankructwo).
-    Zawsze używaj Half Kelly (0.5).
-    Argumenty win_rate, avg_win, avg_loss muszą być IDENTYCZNE jak te podane do kelly_calculator.
-    """
-    # Wymuszamy Half Kelly (0.5) wewnątrz funkcji, żeby agent nie musiał się nad tym zastanawiać
-    return monte_carlo_math(win_rate, avg_win, avg_loss, kelly_fraction_used=0.5)
+class MonteCarloInput(BaseModel):
+    win_rate: float = Field(description="Prawdopodobieństwo wygranej (identyczne jak w kelly_calculator)")
+    avg_win: float = Field(description="Średni zysk (identyczny jak w kelly_calculator)")
+    avg_loss: float = Field(description="Średnia strata (identyczna jak w kelly_calculator)")
+
+# Tworzymy narzędzia z jawnym schematem
+kelly_calculator = StructuredTool.from_function(
+    func=calculate_kelly_math,
+    name="kelly_calculator",
+    description="Oblicza optymalny rozmiar pozycji (Kelly Criterion).",
+    args_schema=KellyInput
+)
+
+monte_carlo_simulation = StructuredTool.from_function(
+    func=monte_carlo_math,
+    name="monte_carlo_simulation",
+    description="Przeprowadza symulację Monte Carlo i sprawdza ryzyko wariantowe.",
+    args_schema=MonteCarloInput
+)
 
 tools = [kelly_calculator, monte_carlo_simulation]
-
 # ==========================================
 # 3. PERSONA AGENTA (Instrukcje zachowania)
 # ==========================================
@@ -147,9 +153,9 @@ with st.sidebar:
 def init_agent(_api_key):
     os.environ["GOOGLE_API_KEY"] = _api_key
 #    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0)
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
+#    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
 #    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-001", temperature=0)
-#    llm = ChatGoogleGenerativeAI(model="models/gemini-pro", temperature=0)
+    llm = ChatGoogleGenerativeAI(model="models/gemini-pro", temperature=0)
 #    llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0)
     prompt = ChatPromptTemplate.from_messages([
         ("system", SYSTEM_PROMPT),
