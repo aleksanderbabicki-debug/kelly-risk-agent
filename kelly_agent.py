@@ -171,7 +171,8 @@ with st.sidebar:
 @st.cache_resource
 def init_agent(_api_key):
     os.environ["GOOGLE_API_KEY"] = _api_key
-    llm = ChatGoogleGenerativeAI(model="gemini-3.5-flash", temperature=0)
+    #llm = ChatGoogleGenerativeAI(model="gemini-3.5-flash", temperature=0)
+    llm = ChatGoogleGenerativeAI(model="gemini-3.1-flash-lite", temperature=0)
     agent_executor = create_react_agent(model=llm, tools=tools, prompt=SYSTEM_PROMPT)
     return agent_executor
 
