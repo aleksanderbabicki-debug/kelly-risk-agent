@@ -6,3 +6,4 @@ langgraph>=0.3.0
 google-generativeai>=0.8.0
 nest-asyncio
 numpy
+pandas
