@@ -151,7 +151,7 @@ def init_agent(_api_key):
     
     # Tworzenie agenta za pomocą biblioteki langgraph z wbudowaną personą systemową
     #agent_executor = create_react_agent(model=llm, tools=tools, state_modifier=SYSTEM_PROMPT)
-    agent_executor = create_react_agent(model=llm, tools=tools, messages_modifier=SYSTEM_PROMPT)
+    agent_executor = create_react_agent(model=llm, tools=tools, prompt=SYSTEM_PROMPT)
     return agent_executor
 
 st.title("🛡️ Agent Zarządzania Ryzykiem")
