@@ -9,7 +9,7 @@ import nest_asyncio
 # CRITICAL FIX: Naprawia błąd "There is no current event loop" w Streamlit Cloud
 nest_asyncio.apply()
 
-from langchain_google_generativeai import ChatGoogleGenerativeAI
+#from langchain_google_generativeai import ChatGoogleGenerativeAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import create_tool_calling_agent, AgentExecutor
 from langchain_core.prompts import ChatPromptTemplate
