@@ -190,20 +190,23 @@ if api_key:
         with col3:
             avg_loss_input = st.number_input("Średnia Strata (wielokrotność ryzyka, np. 1.0)", min_value=0.1, value=1.0, step=0.1)
             
-        submit_button = st.form_submit_button("Uruchom Analizę Agenta")
+submit_button = st.form_submit_button("Uruchom Analizę Agenta")
         
     if submit_button:
         with st.spinner("Agent analizuje ryzyko i uruchamia symulacje..."):
             try:
                 user_query = f"Zanalizuj strategię: win_rate={win_rate_input}, avg_win={avg_win_input}, avg_loss={avg_loss_input}."
                 
-                # Wywołanie agenta za pomocą nowego interfejsu
+                # Wywołanie agenta
                 response = agent_executor.invoke({"messages": [("user", user_query)]})
                 raw_output = response["messages"][-1].content
                 
-                # Oczyszczanie struktury danych raportu tekstowego
+                # POPRAWKA: Prawidłowe wyciąganie tekstu z listy słowników
                 if isinstance(raw_output, list) and len(raw_output) > 0:
-                    final_text = raw_output.get('text', str(raw_output))
+                    if isinstance(raw_output[0], dict) and 'text' in raw_output[0]:
+                        final_text = raw_output[0]['text']
+                    else:
+                        final_text = str(raw_output[0])
                 elif isinstance(raw_output, dict):
                     final_text = raw_output.get('text', str(raw_output))
                 else:
@@ -234,6 +237,4 @@ if api_key:
                         st.warning("Nie można wygenerować wykresów: " + chart_data["error"])
                 
             except Exception as e:
-                st.error(f"Wystąpił błąd podczas analizy: {str(e)}")	
-
-
+                st.error(f"Wystąpił błąd podczas analizy: {str(e)}")
