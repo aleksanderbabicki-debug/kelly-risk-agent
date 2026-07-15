@@ -192,7 +192,7 @@ if api_key:
             
 submit_button = st.form_submit_button("Uruchom Analizę Agenta")
         
-if submit_button:
+  if submit_button:
         with st.spinner("Agent analizuje ryzyko i uruchamia symulacje..."):
             try:
                 user_query = f"Zanalizuj strategię: win_rate={win_rate_input}, avg_win={avg_win_input}, avg_loss={avg_loss_input}."
