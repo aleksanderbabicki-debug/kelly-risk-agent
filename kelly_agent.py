@@ -1,6 +1,7 @@
-# Wersja 5 - Pełny, działający kod produkcyjny z obsługą Gemini 3.5 i czystym formatowaniem
+# Wersja 6 - Produkcyjna z interaktywnymi wykresami Monte Carlo w Streamlit
 import os
 import numpy as np
+import pandas as pd
 import streamlit as st
 import asyncio
 import nest_asyncio
@@ -39,10 +40,15 @@ def monte_carlo_math(win_rate: float, avg_win: float, avg_loss: float, kelly_fra
     max_drawdowns = []
     final_capitals = []
     
-    for _ in range(num_simulations):
+    # Słownik do zapisu ścieżek 10 wybranych symulacji do wykresu liniowego
+    plot_simulations = {}
+    
+    for sim_idx in range(num_simulations):
         capital = 10000
         peak = capital
         max_dd = 0
+        capital_history = [capital]
+        
         for _ in range(num_trades):
             if np.random.rand() < win_rate:
                 profit_loss = capital * position_size * avg_win
@@ -57,25 +63,46 @@ def monte_carlo_math(win_rate: float, avg_win: float, avg_loss: float, kelly_fra
             dd = (peak - capital) / peak
             max_dd = max(max_dd, dd)
             
+            capital_history.append(capital)
             if capital == 0: 
+                # Jeśli zbankrutował, dopełniamy resztę historii zerami
+                capital_history.extend([0] * (num_trades - len(capital_history) + 1))
                 break
                 
         final_capitals.append(capital)
         max_drawdowns.append(max_dd)
+        
+        # Zapisujemy tylko pierwsze 10 symulacji, żeby nie przeciążyć interfejsu wykresu
+        if sim_idx < 10:
+            plot_simulations[f"Symulacja {sim_idx + 1}"] = capital_history
 
     ruin_prob = (len([c for c in final_capitals if c == 0]) / num_simulations) * 100
     valid_finals = [c for c in final_capitals if c > 0]
     dd_80_percentile = round(np.percentile(max_drawdowns, 80) * 100, 2)
     
+    # Tworzymy DataFrame dla wykresu liniowego (ścieżki kapitału)
+    df_curves = pd.DataFrame(plot_simulations)
+    
+    # Tworzymy histogram dla Drawdownu (risk distribution)
+    dd_procentowe = [round(dd * 100, 1) for dd in max_drawdowns]
+    counts, bins = np.histogram(dd_procentowe, bins=10)
+    df_hist = pd.DataFrame({
+        "Maksymalne obsunięcie (%)": [f"{int(bins[i])}-{int(bins[i+1])}%" for i in range(len(counts))],
+        "Liczba scenariuszy (na 1000)": counts
+    })
+    
     return {
         "szansa_na_bankructwo_%": round(ruin_prob, 2),
         "oczekiwany_kapital_koncowy_$": round(np.median(valid_finals), 2) if valid_finals else 0,
         "max_drawdown_w_80%_scenariuszy_%": dd_80_percentile,
-        "uzyty_rozmiar_pozycji_kelly": f"{kelly_fraction_used} (Half Kelly)"
+        "uzyty_rozmiar_pozycji_kelly": f"{kelly_fraction_used} (Half Kelly)",
+        # Nowe klucze z danymi do wykresów przekazywane bezpośrednio do sesji Streamlit pod maską
+        "df_curves": df_curves,
+        "df_hist": df_hist
     }
 
 # ==========================================
-# 2. NARZĘDZIA DLA AGENTA (Z opisami Pydantic dla AI)
+# 2. NARZĘDZIA DLA AGENTA (Bez zmian)
 # ==========================================
 class KellyInput(BaseModel):
     win_rate: float = Field(description="Prawdopodobieństwo wygranej jako ułamek od 0 do 1 (np. 0.55)")
@@ -144,10 +171,7 @@ with st.sidebar:
 @st.cache_resource
 def init_agent(_api_key):
     os.environ["GOOGLE_API_KEY"] = _api_key
-    # Nowoczesny model z pełną obsługą wymaganych podpisów myślowych dla narzędzi
     llm = ChatGoogleGenerativeAI(model="gemini-3.5-flash", temperature=0)
-    
-    # Inicjalizacja stabilnej architektury agenta poprzez jawne przekazanie promptu systemowego
     agent_executor = create_react_agent(model=llm, tools=tools, prompt=SYSTEM_PROMPT)
     return agent_executor
 
@@ -173,26 +197,43 @@ if api_key:
             try:
                 user_query = f"Zanalizuj strategię: win_rate={win_rate_input}, avg_win={avg_win_input}, avg_loss={avg_loss_input}."
                 
-                # Wywołanie agenta za pomocą nowego interfejsu opartego o historię wiadomości
+                # Wywołanie agenta za pomocą nowego interfejsu
                 response = agent_executor.invoke({"messages": [("user", user_query)]})
-                
-                # Pobranie surowej odpowiedzi z ostatniego kroku
                 raw_output = response["messages"][-1].content
                 
-                # Oczyszczanie struktury danych - ekstrakt właściwego tekstu Markdown, odrzucenie metadanych JSON
+                # Oczyszczanie struktury danych raportu tekstowego
                 if isinstance(raw_output, list) and len(raw_output) > 0:
-                    final_text = raw_output[0].get('text', str(raw_output))
+                    final_text = raw_output.get('text', str(raw_output))
                 elif isinstance(raw_output, dict):
                     final_text = raw_output.get('text', str(raw_output))
                 else:
                     final_text = str(raw_output)
                 
-                # Renderowanie pięknego raportu w Streamlit
+                # Uruchomienie obliczeń dla danych wykresów
+                chart_data = monte_carlo_math(win_rate_input, avg_win_input, avg_loss_input)
+                
+                # Renderowanie układu dwukolumnowego w Streamlit
                 st.markdown("---")
-                st.subheader("🛡️ Oficjalny Raport Szefa Zarządzania Ryzykiem (CRO)")
-                st.markdown(final_text)
+                layout_col1, layout_col2 = st.columns(2)
+                
+                with layout_col1:
+                    st.subheader("🛡️ Raport Szefa Zarządzania Ryzykiem")
+                    st.markdown(final_text)
+                    
+                with layout_col2:
+                    st.subheader("📈 Interaktywne Wykresy Symulacji")
+                    if "error" not in chart_data:
+                        # Wykres 1: Ścieżki kapitałowe
+                        st.markdown("**Przykładowe trajektorie zmian kapitału (10 serii po 100 transakcji):**")
+                        st.line_chart(chart_data["df_curves"])
+                        
+                        # Wykres 2: Histogram ryzyka drawdownów
+                        st.markdown("**Rozkład prawdopodobieństwa maksymalnego obsunięcia portfela (Max Drawdown):**")
+                        st.bar_chart(data=chart_data["df_hist"], x="Maksymalne obsunięcie (%)", y="Liczba scenariuszy (na 1000)", color="#ff4b4b")
+                    else:
+                        st.warning("Nie można wygenerować wykresów: " + chart_data["error"])
                 
             except Exception as e:
-                st.error(f"Wystąpił błąd podczas analizy: {str(e)}")
+                st.error(f"Wystąpił błąd podczas analizy: {str(e)}")	
 
 
