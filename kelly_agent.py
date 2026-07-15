@@ -1,4 +1,4 @@
-# Wersja 4 - Pełna migracja na LangGraph i Gemini 3.5
+# Wersja 5 - Pełny, działający kod produkcyjny z obsługą Gemini 3.5 i czystym formatowaniem
 import os
 import numpy as np
 import streamlit as st
@@ -10,8 +10,8 @@ nest_asyncio.apply()
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.prebuilt import create_react_agent
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field
 
 # ==========================================
 # 1. FUNKCJE MATEMATYCZNE (Mózg analityczny)
@@ -77,8 +77,6 @@ def monte_carlo_math(win_rate: float, avg_win: float, avg_loss: float, kelly_fra
 # ==========================================
 # 2. NARZĘDZIA DLA AGENTA (Z opisami Pydantic dla AI)
 # ==========================================
-from pydantic import BaseModel, Field
-
 class KellyInput(BaseModel):
     win_rate: float = Field(description="Prawdopodobieństwo wygranej jako ułamek od 0 do 1 (np. 0.55)")
     avg_win: float = Field(description="Średni zysk jako wielokrotność ryzyka (np. 2.0)")
@@ -136,7 +134,7 @@ with st.sidebar:
         st.success("Klucz API wczytany automatycznie z chmury! 🚀")
     else:
         api_key = st.text_input("Wklej swój klucz Google Gemini API:", type="password")
-        st.markdown("[Kliknij tutaj, aby zdobyć darmowy klucz](https://aistudio.google.com/app/apikey)")
+        st.markdown("[Kliknij tutaj, aby zdobyć darmowy klucz](https://google.com)")
         
         if not api_key:
             st.warning("Aby agent działał, musisz wkleić klucz API.")
@@ -146,18 +144,16 @@ with st.sidebar:
 @st.cache_resource
 def init_agent(_api_key):
     os.environ["GOOGLE_API_KEY"] = _api_key
-    # Definicja nowoczesnego modelu Gemini 3.5 z obsługą myślenia/narzędzi
+    # Nowoczesny model z pełną obsługą wymaganych podpisów myślowych dla narzędzi
     llm = ChatGoogleGenerativeAI(model="gemini-3.5-flash", temperature=0)
     
-    # Tworzenie agenta za pomocą biblioteki langgraph z wbudowaną personą systemową
-    #agent_executor = create_react_agent(model=llm, tools=tools, state_modifier=SYSTEM_PROMPT)
+    # Inicjalizacja stabilnej architektury agenta poprzez jawne przekazanie promptu systemowego
     agent_executor = create_react_agent(model=llm, tools=tools, prompt=SYSTEM_PROMPT)
     return agent_executor
 
 st.title("🛡️ Agent Zarządzania Ryzykiem")
 st.markdown("Wprowadź parametry swojej strategii inwestycyjnej (akcje/opcje). Agent obliczy Kryterium Kelly'ego oraz przeprowadzi analizę Monte Carlo.")
 
-# Formularz pobierania danych od użytkownika w Streamlit
 if api_key:
     agent_executor = init_agent(api_key)
     
@@ -175,17 +171,28 @@ if api_key:
     if submit_button:
         with st.spinner("Agent analizuje ryzyko i uruchamia symulacje..."):
             try:
-                # Tworzymy prompt tekstowy dla nowego formatu wywołania agenta
                 user_query = f"Zanalizuj strategię: win_rate={win_rate_input}, avg_win={avg_win_input}, avg_loss={avg_loss_input}."
                 
-                # Wywołanie agenta LangGraph
+                # Wywołanie agenta za pomocą nowego interfejsu opartego o historię wiadomości
                 response = agent_executor.invoke({"messages": [("user", user_query)]})
                 
-                # Pobranie ostatniej wygenerowanej wiadomości tekstowej od AI
-                final_text = response["messages"][-1].content
+                # Pobranie surowej odpowiedzi z ostatniego kroku
+                raw_output = response["messages"][-1].content
                 
-                st.subheader("🛡️ Raport Szefa Zarządzania Ryzykiem")
+                # Oczyszczanie struktury danych - ekstrakt właściwego tekstu Markdown, odrzucenie metadanych JSON
+                if isinstance(raw_output, list) and len(raw_output) > 0:
+                    final_text = raw_output[0].get('text', str(raw_output))
+                elif isinstance(raw_output, dict):
+                    final_text = raw_output.get('text', str(raw_output))
+                else:
+                    final_text = str(raw_output)
+                
+                # Renderowanie pięknego raportu w Streamlit
+                st.markdown("---")
+                st.subheader("🛡️ Oficjalny Raport Szefa Zarządzania Ryzykiem (CRO)")
                 st.markdown(final_text)
+                
             except Exception as e:
                 st.error(f"Wystąpił błąd podczas analizy: {str(e)}")
+
 
