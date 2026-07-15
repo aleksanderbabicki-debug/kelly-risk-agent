@@ -11,8 +11,10 @@ nest_asyncio.apply()
 
 #from langchain_google_generativeai import ChatGoogleGenerativeAI
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.agents import AgentExecutor
-from langchain.agents import create_tool_calling_agent
+#from langchain_core.agents import AgentExecutor
+#from langchain.agents import create_tool_calling_agent
+from langgraph.prebuilt import create_react_agent
+agent_executor = create_react_agent(model=llm, tools=[kelly_calculator])
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
 
