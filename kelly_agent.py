@@ -1,22 +1,17 @@
-# Wersja 3 - naprawa zaleznosci
+# Wersja 4 - Pełna migracja na LangGraph i Gemini 3.5
 import os
 import numpy as np
 import streamlit as st
 import asyncio
 import nest_asyncio
 
-
 # CRITICAL FIX: Naprawia błąd "There is no current event loop" w Streamlit Cloud
 nest_asyncio.apply()
 
-#from langchain_google_generativeai import ChatGoogleGenerativeAI
 from langchain_google_genai import ChatGoogleGenerativeAI
-#from langchain_core.agents import AgentExecutor
-#from langchain.agents import create_tool_calling_agent
 from langgraph.prebuilt import create_react_agent
-agent_executor = create_react_agent(model=llm, tools=[kelly_calculator])
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.tools import tool
+from langchain_core.tools import StructuredTool
 
 # ==========================================
 # 1. FUNKCJE MATEMATYCZNE (Mózg analityczny)
@@ -25,7 +20,7 @@ def calculate_kelly_math(win_rate: float, avg_win: float, avg_loss: float) -> di
     R = avg_win / avg_loss
     full_kelly = win_rate - ((1 - win_rate) / R)
     if full_kelly < 0:
-        return {"error": "Strategia ma ujemne wartość oczekiwaną (EV). Kelly wynosi ujemnie, nie inwestuj."}
+        return {"error": "Strategia ma ujemną wartość oczekiwaną (EV). Kelly wynosi ujemnie, nie inwestuj."}
     half_kelly = full_kelly / 2
     return {
         "full_kelly_pct": round(full_kelly * 100, 2),
@@ -80,12 +75,10 @@ def monte_carlo_math(win_rate: float, avg_win: float, avg_loss: float, kelly_fra
     }
 
 # ==========================================
-# 2. NARZĘDZIA DLA AGENTA (Z bardzo dokładnymi opisami dla AI!)
+# 2. NARZĘDZIA DLA AGENTA (Z opisami Pydantic dla AI)
 # ==========================================
-from langchain_core.tools import StructuredTool, tool
 from pydantic import BaseModel, Field
 
-# Definiujemy schematy wejściowe
 class KellyInput(BaseModel):
     win_rate: float = Field(description="Prawdopodobieństwo wygranej jako ułamek od 0 do 1 (np. 0.55)")
     avg_win: float = Field(description="Średni zysk jako wielokrotność ryzyka (np. 2.0)")
@@ -96,7 +89,6 @@ class MonteCarloInput(BaseModel):
     avg_win: float = Field(description="Średni zysk (identyczny jak w kelly_calculator)")
     avg_loss: float = Field(description="Średnia strata (identyczna jak w kelly_calculator)")
 
-# Tworzymy narzędzia z jawnym schematem
 kelly_calculator = StructuredTool.from_function(
     func=calculate_kelly_math,
     name="kelly_calculator",
@@ -112,6 +104,7 @@ monte_carlo_simulation = StructuredTool.from_function(
 )
 
 tools = [kelly_calculator, monte_carlo_simulation]
+
 # ==========================================
 # 3. PERSONA AGENTA (Instrukcje zachowania)
 # ==========================================
@@ -136,15 +129,12 @@ STYLE ODPOWIEDZI:
 # ==========================================
 st.set_page_config(page_title="Agent Ryzyka Kelly", page_icon="🛡️", layout="wide")
 
-# Pobieranie klucza API - najpierw z chmury (Secrets), potem z paska bocznego
 with st.sidebar:
     st.header("🔑 Konfiguracja API")
-    # Sprawdzamy, czy klucz jest w bezpiecznym sejfie Streamlit Cloud
     if "GOOGLE_API_KEY" in st.secrets:
         api_key = st.secrets["GOOGLE_API_KEY"]
         st.success("Klucz API wczytany automatycznie z chmury! 🚀")
     else:
-        # Jeśli nie ma w chmurze (np. odpalasz u siebie na laptopie), pytamy
         api_key = st.text_input("Wklej swój klucz Google Gemini API:", type="password")
         st.markdown("[Kliknij tutaj, aby zdobyć darmowy klucz](https://aistudio.google.com/app/apikey)")
         
@@ -153,67 +143,48 @@ with st.sidebar:
         else:
             st.success("Klucz API podany. Agent gotowy do pracy!")
 
-# Funkcja cachująca - agent tworzy się tylko RAZ, a nie przy każdym kliknięciu!
 @st.cache_resource
 def init_agent(_api_key):
     os.environ["GOOGLE_API_KEY"] = _api_key
+    # Definicja nowoczesnego modelu Gemini 3.5 z obsługą myślenia/narzędzi
     llm = ChatGoogleGenerativeAI(model="gemini-3.5-flash", temperature=0)
-#    llm = ChatGoogleGenerativeAI(model="gemini-3.5-flash", temperature=0)
-#    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
-#    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro-001", temperature=0)  # <-- ODKOMENTUJ TĘ LINIĘ
-#    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0)
-#    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
-#    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-001", temperature=0)
-#    llm = ChatGoogleGenerativeAI(model="models/gemini-pro", temperature=0)
-#    llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0)
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_PROMPT),
-        ("human", "{input}"),
-        ("placeholder", "{agent_scratchpad}"),
-    ])
-    agent = create_tool_calling_agent(llm, tools, prompt)
-    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=False)
+    
+    # Tworzenie agenta za pomocą biblioteki langgraph z wbudowaną personą systemową
+    agent_executor = create_react_agent(model=llm, tools=tools, state_modifier=SYSTEM_PROMPT)
     return agent_executor
 
 st.title("🛡️ Agent Zarządzania Ryzykiem")
-st.markdown("Wprowadź parametry swojej strategii inwestycyjnej (akcje/opcje). Agent obliczy Kryterium Kelly'ego, przejdzie symulację Monte Carlo 1000 wariantów przyszłości i oceni, czy **psychicznie przeżyjesz** tę strategię.")
+st.markdown("Wprowadź parametry swojej strategii inwestycyjnej (akcje/opcje). Agent obliczy Kryterium Kelly'ego oraz przeprowadzi analizę Monte Carlo.")
 
-# Formularz z polami
-with st.form("parametry_strategii"):
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        win_rate = st.number_input("Win Rate (%)", min_value=1.0, max_value=99.0, value=50.0, step=5.0, help="Jak często wygrywasz? (np. 50 dla 50%)")
-    with col2:
-        avg_win = st.number_input("Średni Zysk (R)", min_value=0.1, value=2.0, step=0.1, help="Ile dolarów zyskujesz na 1 dolar ryzyka? (Risk/Reward)")
-    with col3:
-        avg_loss = st.number_input("Średnia Strata", min_value=0.1, value=1.0, step=0.1, help="Zwykle 1.0 (tracisz to, co zaryzykowałeś)")
+# Formularz pobierania danych od użytkownika w Streamlit
+if api_key:
+    agent_executor = init_agent(api_key)
     
-    submitted = st.form_submit_button("🧠 Przeanalizuj strategię")
-
-# Logika po kliknięciu przycisku
-if submitted:
-    if not api_key:
-        st.error("Zapomniałeś podać klucza API w menu po lewej stronie!")
-    else:
-        agent_executor = init_agent(api_key)
-        
-        win_rate_decimal = win_rate / 100  # Konwersja z np. 50 na 0.50 dla matematyki
-        
-        with st.spinner('Agent oblicza Kelly\'ego i symuluje 1000 równoległych wszechświatów... (To potrwa ok. 10-20 sekund)'):
-            pytanie = (
-                f"Chcę przeanalizować strategię. Mój Win Rate to {win_rate_decimal} "
-                f"(czyli {win_rate}%), mój średni zysk (avg_win) to {avg_win}, "
-                f"a moja średnia strata (avg_loss) to {avg_loss}. "
-                f"Co o tym myślisz i jakiego rozmiaru pozycji mam użyć?"
-            )
+    with st.form("risk_form"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            win_rate_input = st.number_input("Win Rate (np. 0.55 dla 55%)", min_value=0.01, max_value=0.99, value=0.55, step=0.01)
+        with col2:
+            avg_win_input = st.number_input("Średni Zysk (wielokrotność ryzyka, np. 2.0)", min_value=0.1, value=2.0, step=0.1)
+        with col3:
+            avg_loss_input = st.number_input("Średnia Strata (wielokrotność ryzyka, np. 1.0)", min_value=0.1, value=1.0, step=0.1)
             
+        submit_button = st.form_submit_button("Uruchom Analizę Agenta")
+        
+    if submit_button:
+        with st.spinner("Agent analizuje ryzyko i uruchamia symulacje..."):
             try:
-                odpowiedz = agent_executor.invoke({"input": pytanie})
+                # Tworzymy prompt tekstowy dla nowego formatu wywołania agenta
+                user_query = f"Zanalizuj strategię: win_rate={win_rate_input}, avg_win={avg_win_input}, avg_loss={avg_loss_input}."
                 
-                st.markdown("---")
-                st.subheader("📊 Raport Agenta:")
-                # Wyświetlenie odpowiedzi, zachowując formatowanie tekstu od AI (pogrubienia itp.)
-                st.markdown(odpowiedz["output"])
+                # Wywołanie agenta LangGraph
+                response = agent_executor.invoke({"messages": [("user", user_query)]})
                 
+                # Pobranie ostatniej wygenerowanej wiadomości tekstowej od AI
+                final_text = response["messages"][-1].content
+                
+                st.subheader("🛡️ Raport Szefa Zarządzania Ryzykiem")
+                st.markdown(final_text)
             except Exception as e:
-                st.error(f"Wystąpił błąd. Sprawdź czy klucz API jest poprawny. Błąd: {e}")
+                st.error(f"Wystąpił błąd podczas analizy: {str(e)}")
+
