@@ -154,7 +154,7 @@ with st.sidebar:
 @st.cache_resource
 def init_agent(_api_key):
     os.environ["GOOGLE_API_KEY"] = _api_key
-     llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
 #    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro-001", temperature=0)  # <-- ODKOMENTUJ TĘ LINIĘ
 #    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0)
 #    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
